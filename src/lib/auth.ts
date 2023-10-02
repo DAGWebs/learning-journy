@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 import GoogleProvider from "next-auth/providers/google";
 
+// Extend the default session interface to include user id and credits
 declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
@@ -12,6 +13,7 @@ declare module "next-auth" {
   }
 }
 
+// Extend the JWT interface to include user id and credits
 declare module "next-auth/jwt" {
   interface JWT {
     id: string;
@@ -21,15 +23,17 @@ declare module "next-auth/jwt" {
 
 export const authOptions: NextAuthOptions = {
   session: {
-    strategy: "jwt",
+    strategy: "jwt", // Use JWT strategy for session management
   },
   callbacks: {
     jwt: async ({ token }) => {
+      // Fetch user from database using email from the token
       const db_user = await prisma.user.findFirst({
         where: {
           email: token.email,
         },
       });
+      // If the user is found in the database, add id and credits to the token
       if (db_user) {
         token.id = db_user.id;
         token.credits = db_user.credits;
@@ -37,8 +41,10 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     session: ({ session, token }) => {
+      // Map the token details to the session user object
       if (token) {
-        (session.user.id = token.id), (session.user.name = token.name);
+        session.user.id = token.id;
+        session.user.name = token.name;
         session.user.email = token.email;
         session.user.image = token.picture;
         session.user.credits = token.credits;
@@ -46,9 +52,14 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
+  // Secret to encode and decode JWT tokens
   secret: process.env.NEXTAUTH_SECRET as string,
+
+  // Use Prisma as the database adapter for next-auth
   adapter: PrismaAdapter(prisma),
+
   providers: [
+    // Google authentication provider configuration
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
@@ -56,6 +67,7 @@ export const authOptions: NextAuthOptions = {
   ],
 };
 
+// Function to get the authenticated session from the server
 export const getAuthSession = () => {
   return getServerSession(authOptions);
 };
